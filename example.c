@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "ls.h"
+#include "cg.h"
 #include "testfunc.h"
 
 static int num_evals;

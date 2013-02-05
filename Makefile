@@ -1,11 +1,11 @@
 ########################################################################
 # General Makefile
 ########################################################################
-PROGRAM = test2
-OBJS = test2.o \
-       ls.o \
+PROGRAM = example
+OBJS = example.o \
+       cg.o \
        testfunc.o 
-DEPS = testfunc.h ls.h
+DEPS = testfunc.h cg.h
 
 ODIR = .
 SDIR = .

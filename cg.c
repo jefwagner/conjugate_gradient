@@ -1,343 +1,316 @@
 /*!
- *********************************************************************
- * Simple Non-linear Conjugate Gradient Optimization
- **********************************************************************
- *
- * This file implements my own version of a non-linear conjugate
- * gradient optimization routine. I wrote it using wikipedia as the
- * only reference. The method returns when either the change in the
- * vector is less than some tolerance, or the system has reaches a
- * maximum interation. Both the tollerance and iterations can be set
- * using the define macros.
- *
- * The beta in the conjugate gradient method is chosen as the max( 0,
- * beta_PR), where the beta_PR is fromthe Polak-Ribiere formula. 
- *
- * The line search is from a CS class in at U Wisconson, who had the
- * lecture notes on the web. The relevant lecture notes are included
- * in the something or other.
+ * Conjugate Gradient File
  */
+#include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 
-#include <stdio.h>
+#include "cg.h"
 
-#define TOLERANCE 1.e-4
-#define ITER_MAX 200
-#define ALPHA_INIT 1.
-#define ALPHA_MAX 1.e100
+#define LS_ITER_MAX 10
+#define REC_MAX 10
+#define DX_TOL 1.e-4
+#define DELTAX_TOL 1.e1
 
-struct cg_workspace{
-  double (*h)( int n, const double *x, double *dx, void *p);
-  int n;
-  void *params;
+void strong_wolfe( struct cg_workspace *g, double *x, double alpha0);
+void  bracket_search( struct cg_workspace *g, double *x,
+		      int sense, int rec_count);
+double interpolate_cubic( double f0, double df0, double x0,
+			  double f1, double df1, double x1);
+double cg_beta_PRP( struct cg_workspace *g);
+double estimate_alpha0( struct cg_workspace *g, double smag_old);
+int stopping_condition( struct cg_workspace *g);
 
-  double val;
-  double alpha;
 
-  double *dx;
-  double *dx_old;
-  double *s;
-  double *s_old;
-
-  double *x_alpha;
-  double *dx_alpha;
-};
-
-double ls_function( struct cg_workspace *g, 
-		    const double *x, const double *p 
-		    double alpha, double *df)
+/*!
+ * command to allocate the memory needed for the conjugate gradient method
+ */
+struct cg_workspace* allocate_cg_workspace( int n)
 {
-  double f;
-  int i;
-  
-  for( i=0; i<n; i++){
-    g->x_alpha[i] = x[i] + alpha*p[i];
-    g->dx_alpha[i] = 0.;
-  }
-
-  f = g->h( g->n, g->x_alpha, g->dx_alpha, g->params);
-  *df = 0.;
-  for( i=0; i<n; i++){
-    *df += p[i]*dx_alpha[i];
-  }
-
-  return( f);
-}
-
-double line_search( struct cg_workspace *g,
-		    const double *x, const double *p, double alpha_0)
-{
-  double f0, df0;
-  double alpha_lo, f_lo, df_lo;
-  double alpha_hi, f_hi, df_hi;
-
-  alpha_lo = 0.;
-  f0 = ls_function( g, x, p, 0., &df0);
-  f_lo = f_0;
-  df_lo = df_0;
-
-  alpha_hi = alpha_0;
-  f_hi = ls_function( g, x, p, alpha_hi, &df_hi);
-
-}
-
-struct cg_workspace* 
-allocate_cg_workspace( double (*h)(int n, const double *x, 
-				   double *dx, void *p),
-		       int n, void *params)
-{
-  struct cg_workspace *g = (struct cg_workspace*) 
-    malloc( sizeof(struct cg_workspace) );
-
-  g->h = h;
+  struct cg_workspace *g =(struct cg_workspace *) 
+    malloc( sizeof( struct cg_workspace));
   g->n = n;
-  g->params = params;
-
-  g->dx = (double *) malloc( n*sizeof(double));
-  g->dx_old = (double *) malloc( n*sizeof(double));
-  g->s = (double *) malloc( n*sizeof(double));
-  g->s_old = (double *) malloc( n*sizeof(double));
-  g->x_alpha = (double *) malloc( n*sizeof(double));
-  g->dx_alpha = (double *) malloc( n*sizeof(double));
+  g->dx0 = (double *) malloc( n*sizeof(double) );
+  g->s = (double *) malloc( n*sizeof(double) );
+  g->dxp = (double *) malloc( n*sizeof(double) );
 
   return( g);
 }
 
+/*!
+ * function that free's the memory needed for the conjugate gradient method
+ */
 void free_cg_workspace( struct cg_workspace *g)
 {
-  free( g->dx);
-  free( g->dx_old);
+  free( g->dxp);
   free( g->s);
-  free( g->s_old);
-  free( g->x_alpha);
-  free( g->dx_alpha);
-
+  free( g->dx0);
   free( g);
 }
 
-double mag_array( int n, const double *x)
+/*!
+ * Conjugate Gradient Algorithm
+ * Taken from the wikipedia page
+ */
+void conjugate_gradient( struct cg_workspace *g, double *x)
 {
-  int i;
-  double mag = 0;
-  
+  double (*h)( int n, const double *x, double *dx, void *p) = g->h;
+  int n = g->n;
+  void *p = g->params;
+
+  int i, iter = 0, stopping_status;
+  double alpha0, beta, dir, smag_temp;
+
+  /* Evaluate the function at the current point */
   for( i=0; i<n; i++){
-    mag += x[i]*x[i];
+    (g->dx0)[i] = 0.;
   }
-  
-  return( sqrt(mag) );
-}
-
-double interpolate_alpha( double alpha_lo, double alpha_hi){
-  return( (alpha_lo + alpha_hi)/2.);
-}
-
-double my_line_search( struct ls_workspace *s , double alpha_0){
-  double alpha_lo = 0;
-  double alpha_hi = alpha_0;
-  
-
-
-
-double zoom( struct cg_workspace *g, double *x,  
-	     double phi_lo_i, double alpha_lo_i, 
-	     double phi_hi_i, double alpha_hi_i)
-{
-  int i, iter=0;
-  double phi_j, phip_j, phi_0, phip_0, phi_lo, phi_hi;
-  double alpha, alpha_j, alpha_lo, alpha_hi;
-  double c1 = 1.e-4, c2 = 0.9;
-
-  phi_lo = phi_lo_i;
-  alpha_lo = alpha_lo_i;
-  phi_hi = phi_hi_i;
-  alpha_hi = alpha_hi_i;
-
-  phi_0 = g->val;
-  phip_0 = 0;
-  for( i=0; i<g->n; i++){
-    phip_0 += -(g->s)[i]*(g->dx)[i];
+  g->h0 = h( n, x, g->dx0, p);
+  for( i=0; i<n; i++){
+    (g->dxp)[i] = (g->dx0)[i];
+    (g->s)[i] = -(g->dx0)[i];
   }
-  
-  while( iter < ITER_MAX){
-    alpha_j = interpolate_alpha( alpha_lo, alpha_hi);
 
-    for( i=0; i<g->n; i++){
-      (g->x_alpha)[i] = x[i] + alpha_j*(g->s[i]);
-      (g->dx_alpha)[i] = 0;
-    }
-    phi_j = g->h( g->n, g->x_alpha, g->dx_alpha, g->params);
-    phip_j = 0;
-    for( i=0; i<g->n; i++){
-      phip_j += (g->s)[i]*(g->dx_alpha)[i];
-    }
 
-    if( ( phi_j > phi_0 + c1*alpha_j*phip_0) ||
-	( phi_j >= phi_lo) ){
-      alpha_hi = alpha_j;
-      phi_hi = phi_j;
-    }else{
-      if( fabs(phip_j) <= -c2*phip_0 ){
-	alpha = alpha_j;
-	break;
+  /* Get magnitude of the search direction vector */
+  g->smag = 0.;
+  for( i=0; i<n; i++){
+    g->smag += (g->s)[i]*(g->s)[i];
+  }
+  g->smag = sqrt( g->smag);
+  /* Make a first guess at alpha and do the line search */
+  alpha0 = 1./(g->smag);
+  strong_wolfe( g, x, alpha0);
+
+  /* Evaluate the stopping condition */
+  stopping_status = stopping_condition( g);
+
+  while( !stopping_status ){
+    /* evaluate the new search direction */
+    beta = cg_beta_PRP( g);
+    for( i=0; i<n; i++){
+      (g->s)[i] = -(g->dxp)[i] + beta*(g->s)[i];
+      (g->dx0)[i] = (g->dxp)[i];
+    }
+    /* check the reset condition for the CG method */
+    dir = 0.;
+    for( i=0; i<n; i++){
+      dir += (g->s)[i]*(g->dx0)[i]; 
+    }
+    if( dir > 0. || iter > n ){
+      iter = 0;
+      for( i=0; i<n; i++){
+	(g->s)[i] = -(g->dx0)[i];
       }
-      if( phip_j*(alpha_hi-alpha_lo) >= 0. ){
-	alpha_hi = alpha_lo;
-	phi_hi = phi_lo;
-      }
-      alpha_lo = alpha_j;
-      phi_lo = phi_j;
     }
-  }
+    iter++;
 
-  return( alpha);
+    /* Get magnitude of the search direction vector */
+    smag_temp = 0.;
+    for( i=0; i<n; i++){
+      smag_temp += (g->s)[i]*(g->s)[i];
+    }
+    smag_temp = sqrt( smag_temp);
+    /* Estimate initial guess at alpha and do the line search */
+    alpha0 = estimate_alpha0( g, smag_temp);
+    g->smag = smag_temp;
+    strong_wolfe( g, x, alpha0);
+    
+    /* Evaluate stopping condition */
+    stopping_status = stopping_condition( g);
+ }
 }
 
-double line_search( struct cg_workspace *g, double *x, double alpha_1)
+/*!
+ * Line search algorithm that satisfies the strong Wolfe conditions
+ * taken from algorith 3.5 in .. and ..
+ */
+void strong_wolfe( struct cg_workspace *g, double *x, double alpha0)
 {
-  int i, iter;
-  double alpha, alpha_i, alpha_i_old;
-  double phi_0, phi_i, phi_i_old;
-  double phip_0, phip_i;
-  double c1 = 1.e-4, c2 = 0.9;
+  double (*h)( int n, const double *x, double *dx, void *p) = g->h;
+  int n = g->n;
+  void *p = g->params;
 
-  alpha_i_old = 0;
-  alpha_i = alpha_1;
+  double c1 = 1.e-4;
+  double c2 = 0.1;
+  int i, iter = 0;
+  g->alpham = 0.;
+  g->alphap = alpha0;
 
-  phi_0 = g->val;
-  phip_0 = 0;
-  for( i=0; i<g->n; i++){
-    phip_0 += -(g->s)[i]*(g->dx)[i];
+  /* Get f and df */
+  g->hm = g->h0;
+  g->dh0 = 0.;
+  for( i=0; i<n; i++){
+    g->dh0 += (g->dx0)[i]*(g->s)[i];
   }
-  phi_i = phi_0;
+  g->dh0 = g->dh0/(g->smag);
+  g->dhm = g->dh0;
 
-  iter = 0;
-  while( iter < ITER_MAX ){
+  do{
+    for( i=0; i<n; i++){
+      x[i] = x[i] + ((g->alphap)-(g->alpham))*(g->s)[i];
+      (g->dxp)[i] = 0.;
+    }
+    g->hp = h( n, x, (g->dxp), p);
+    g->dhp = 0.;
+    for( i=0; i<n; i++){
+      g->dhp += (g->dxp)[i]*(g->s)[i];
+    }
+    g->dhp = g->dhp/(g->smag);
 
-    phi_i_old = phi_i;
-    for( i=0; i<g->n; i++){
-      (g->x_alpha)[i] = x[i] + alpha_i*(g->s[i]);
-      (g->dx_alpha)[i] = 0;
-    }
-    phi_i = g->h( g->n, g->x_alpha, g->dx_alpha, g->params);
-    phip_i = 0;
-    for( i=0; i<g->n; i++){
-      phip_i += (g->s)[i]*(g->dx_alpha)[i];
-    }
- 
-    if( ( phi_i > phi_0 + c1*alpha_i*phip_0) ||
-	( phi_i >= phi_i_old && iter > 0) ){
-      alpha = zoom( g, x, phi_i_old, alpha_i_old, 
-		    phi_i, alpha_i);
+    if( g->hp > (g->h0)+c1*(g->alphap)*(g->dh0) || 
+	( g->hp >= g->hm && iter > 0) ){
+      bracket_search( g, x, +1, 0);
       break;
-    }else if( fabs(phip_i) <= -c2*phip_0 ){
-      alpha = alpha_i;
-      break;
-    }else if( phip_i >= 0 ){
-      alpha = zoom( g, x, phi_i, alpha_i, 
-		    phi_i_old, alpha_i_old);
-      break;
-    }else{
-      alpha_i_old = alpha_i;
-      alpha_i = 2*alpha_i;
-      iter++;
     }
-  }
-
-  return( alpha);
+    if( fabs( g->dhp) <= -c2*(g->dh0) ){
+      break;
+    }
+    if( g->dhp >= 0. ){
+      bracket_search( g, x, -1, 0);
+      break;
+    }
+    g->alpham = g->alphap;
+    g->hm = g->hp;
+    g->dhm = g->dhp;
+    g->alphap = 2.*(g->alphap);
+    iter++;
+  }while( iter < LS_ITER_MAX );  
 }
 
-double get_beta( int n, const double *dx, 
-		  const double *dx_old, const double *s)
+/*!
+ * This is the bracketed search algorith
+ * taken from algorith 3.6 in .. and ..
+ * rewritten in recursive form
+ */
+void  bracket_search( struct cg_workspace *g, double *x,
+		      int sense, int rec_count)
 {
+  double (*h)( int n, const double *x, double *dx, void *p) = g->h;
+  int n = g->n;
+  void *p = g->params;
+
+  double c1 = 1.e-4;
+  double c2 = 0.1;
+  double fj, dfj, alphaj, flo;
+  int i, success = 0, new_sense;
+
+  fprintf( stdout, "range: %1.3g\n",
+	   fabs( ((g->alpham)-(g->alphap))*(g->smag)) );
+
+  alphaj = interpolate_cubic( g->hm, g->dhm, g->alpham,
+  			      g->hp, g->dhp, g->alphap);
+/*  alphaj = 0.5*((g->alphap)+(g->alpham)); */
+
+  for( i=0; i<n; i++){
+    x[i] = x[i] + (alphaj-(g->alphap))*(g->s)[i];
+    (g->dxp)[i] = 0.;
+  }
+  fj = h( n, x, (g->dxp), p);
+  dfj = 0.;
+  for( i=0; i<n; i++){
+    dfj += (g->dxp)[i]*(g->s)[i];
+  }
+  dfj = dfj/(g->smag);
+  
+  if( sense == +1 ){
+    flo = g->hm;
+  }else if( sense == -1){
+    flo = g->hp;
+  }
+
+  if( fj > (g->h0) + c1*alphaj*(g->dh0) ||
+      fj >= flo ){
+    if( sense == -1 ){
+      g->alpham = g->alphap;
+      g->hm = g->hp;
+      g->dhm = g->dhp;
+    }
+    (g->alphap) = alphaj;
+    (g->hp) = fj;
+    (g->dhp) = dfj;
+    new_sense = +1;
+  }else{
+    if( fabs( dfj) <= -c2*(g->dh0) ){
+      success = 1;
+    }
+    if( dfj*((g->alpham)-(g->alphap)) >= 0. ){
+      g->alpham = g->alphap;
+      g->hm = g->hp;
+      g->dhm = g->dhp;
+    }
+    (g->alphap) = alphaj;
+    (g->hp) = fj;
+    (g->dhp) = dfj;
+    new_sense = -1; 
+  }
+  if( success != 1 && rec_count < REC_MAX ){
+    bracket_search( g, x, new_sense, rec_count+1);
+  }
+}
+
+/*!
+ * A truncated cubic interpolation.  This little function calculates
+ * the location of the minimum of a cubic polynomial that has its
+ * values and derivatives given at the end points. It the calculated
+ * minimum lies outside of the center 3/4 of the interval then an
+ * estimated position at either at 1/8th or 7/8th of the intevale is
+ * given.
+ */
+double interpolate_cubic( double f0, double df0, double x0,
+			  double f1, double df1, double x1)
+{
+  double d1, d2, sign, coef;
+  double output;
+
+  d1 = df0+df1-3.*(f0-f1)/(x0-x1);
+  sign = ( (x1-x0) >= 0. ? 1. : -1.);
+  d2 = sign*sqrt( d1*d1-df0*df1);
+  coef = (df1+d2-d1)/(df1-df0+2.*d2);
+  
+  coef = ( coef > 0.125 ? coef : 0.125 );
+  coef = ( coef < 0.875 ? coef : 0.875 );
+  
+  output = x1-(x1-x0)*coef;
+
+  return( output );
+}
+
+double cg_beta_PRP( struct cg_workspace *g)
+{
+  int n = g->n;
   int i;
   double num, denom, beta;
 
-  num=0;
-  denom=0;
+  num = 0.;
+  denom = 0.;
   for( i=0; i<n; i++){
-    num += dx[i]*(dx[i]-dx_old[i]);
-    denom += dx_old[i]*dx_old[i];
+    num += (g->dxp)[i]*((g->dxp)[i]-(g->dx0)[i]);
+    denom += (g->dx0)[i]*(g->dx0)[i];
   }
   beta = num/denom;
-  
-  return( ( beta > 0 ) ? beta: 0);
+  return ( beta > 0. ? beta : 0. );
 }
 
-double get_alpha_0( struct cg_workspace *g){
-  int i;
-  double num = 0., denom = 0.;
-
-  for( i=0; i<g->n; i++){
-    num += (g->s_old)[i]*(g->dx_old)[i];
-    denom += (g->s)[i]*(g->dx)[i];
-  }
- 
-  return( g->alpha*num/denom);
-}
-
-void cg_initialize( struct cg_workspace *g, double *x)
+double estimate_alpha0( struct cg_workspace *g, double smag_old)
 {
-  int i;
-  double alpha_0;
-  
-  for( i=0; i<g->n; i++){
-    (g->dx)[i] = 0.;
-  }
-  g->val = g->h( g->n, x, g->dx, g->params);
-  for( i=0; i<g->n; i++){
-    (g->dx)[i] = -(g->dx)[i];
-    (g->s)[i] = (g->dx)[i];
-  }
-
-  alpha_0 = ALPHA_INIT/mag_array( g->n, g->dx);
-  g->alpha = line_search( g, x, alpha_0);
-  for( i=0; i<g->n; i++){
-    x[i] += g->alpha*(g->s)[i];
-  }
+  return( (g->alphap)*(g->smag)/smag_old);
 }
 
-void cg_step( struct cg_workspace *g, double *x)
+int stopping_condition( struct cg_workspace *g)
 {
+  int n = g->n;
   int i;
-  double beta, alpha_0;
+  double deltax_linf_norm = fabs( (g->alphap)*(g->s)[0] );
+  double dhdx_linf_norm = fabs( (g->dxp)[0]);
 
-  for( i=0; i<g->n; i++){
-    (g->dx_old)[i] = (g->dx)[i];
-    (g->dx)[i] = 0.;
+  for( i=1; i<n; i++){
+    deltax_linf_norm = ( fabs( (g->alphap)*(g->s)[i]) > deltax_linf_norm ? 
+			 fabs( (g->alphap)*(g->s)[i]) : deltax_linf_norm );
+    dhdx_linf_norm = ( fabs( (g->dxp)[i]) > dhdx_linf_norm ? 
+		       fabs( (g->dxp)[i]) : dhdx_linf_norm );
   }
-  g->val = g->h( g->n, x, g->dx, g->params);
-  for( i=0; i<g->n; i++){
-    (g->dx)[i] = -(g->dx)[i];
-  }
+  fprintf( stdout, " %1.3g %1.3g\n", deltax_linf_norm, dhdx_linf_norm);
 
-  beta = get_beta( g->n, g->dx, g->dx_old, g->s);
-  for( i=0; i<g->n; i++){
-    (g->s_old)[i] = (g->s)[i];
-    (g->s)[i] = (g->dx)[i] + beta*(g->s)[i];
-  }
-
-  alpha_0 = get_alpha_0( g);
-  g->alpha = line_search( g, x, alpha_0);
-
-  for( i=0; i<g->n; i++){
-    x[i] += g->alpha*(g->s)[i];
-  }
+  return (dhdx_linf_norm < DX_TOL && deltax_linf_norm < DELTAX_TOL);
 }
-
-void conjugate_gradient( struct cg_workspace *g, double *x)
-{
-  int iter=0, test1, test2;
-
-  cg_initialize( g, x);
-  test1 = (g->alpha*mag_array( g->n, g->s) > TOLERANCE);
-  test2 = (iter< ITER_MAX);
-  while( test1 && test2 ){
-    cg_step( g, x);
-    test1 = (g->alpha*mag_array( g->n, g->s) > TOLERANCE);
-    test2 = (iter< ITER_MAX);
-  }
-}
-
-
-
