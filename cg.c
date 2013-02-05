@@ -195,12 +195,8 @@ void  bracket_search( struct cg_workspace *g, double *x,
   double fj, dfj, alphaj, flo;
   int i, success = 0, new_sense;
 
-  fprintf( stdout, "range: %1.3g\n",
-	   fabs( ((g->alpham)-(g->alphap))*(g->smag)) );
-
   alphaj = interpolate_cubic( g->hm, g->dhm, g->alpham,
   			      g->hp, g->dhp, g->alphap);
-/*  alphaj = 0.5*((g->alphap)+(g->alpham)); */
 
   for( i=0; i<n; i++){
     x[i] = x[i] + (alphaj-(g->alphap))*(g->s)[i];
@@ -310,7 +306,6 @@ int stopping_condition( struct cg_workspace *g)
     dhdx_linf_norm = ( fabs( (g->dxp)[i]) > dhdx_linf_norm ? 
 		       fabs( (g->dxp)[i]) : dhdx_linf_norm );
   }
-  fprintf( stdout, " %1.3g %1.3g\n", deltax_linf_norm, dhdx_linf_norm);
 
   return (dhdx_linf_norm < DX_TOL && deltax_linf_norm < DELTAX_TOL);
 }

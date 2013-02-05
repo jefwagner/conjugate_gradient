@@ -3,9 +3,8 @@
 ########################################################################
 PROGRAM = example
 OBJS = example.o \
-       cg.o \
-       testfunc.o 
-DEPS = testfunc.h cg.h
+       cg.o
+DEPS = cg.h
 
 ODIR = .
 SDIR = .
