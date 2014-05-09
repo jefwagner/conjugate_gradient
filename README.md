@@ -1,47 +1,56 @@
 Non-linear conjugate gradient optimization
 ==========================================
 
-An early problem in calculas is to find a minimum or maximum value of
-a (often 1-dimentional) function.
+About a year and a half ago, I started a research project that needed
+to optimize a function of up to 9000 variables. I could calculate the
+gradient of this function, but not the Hessian (the matrix of second
+derivatives). With so many variables, I decided to use a simple
+optimization routine and settled on either a Non-linear conjugate
+gradient
+[https://en.wikipedia.org/wiki/Nonlinear_conjugate_gradient_method] or
+a limited memory BFGS method
+[https://http://en.wikipedia.org/wiki/Limited-memory_BFGS].
 
-We are attempting to find a minimum or maximum value of and
-n-dimentional function.
+There were two C packages that I found that implemented these
+routines, 
 
-Need a function that returns value f and gradient df at a point x.
-(f, df) = f( x)
+  1. The Gnu Scientific Library [http://www.gnu.org/software/gsl/], 
+  2. nlopt from the Ab-initio group at MIT 
+     [http://ab-initio.mit.edu/wiki/index.php/NLopt].  
 
-Non-linear conjugate gradient 
-Find a point x_min where f(x) is near a minimum
-Start at a point x
-(f, df) = f( x)
-s = -df
-beta = df.df
-(x, f, df) = min( f() , (x, s))
-while x is not near min
-    beta = min( 0, df.df/beta);
-    s = df + beta*s
-    (x, f, df) = min( f() , (x, s))
-return x_min = x
+However in testing both, of these packages would fail without any
+indication as to why they failed. So I decided to write my own
+optimization routine. Because it was simpler, I decided to implement
+the non-linear conjugate gradient. Please find the details below.
 
-Need a function that 
+Object oriented style 
+--------------------- 
 
-Line search
-Find a value alpha such that f(x+alpha*s) is sufficiently minimized
-(f_0, df_0) = f(x)
-alpha_left = 0;
-Choose alpha_right;
-(f, df) = f(x+alpha_right*s)
-loop
-  if f >= f_0+c_1*alpha_right*ds
-    return bracket_search( f(), (x, s), alpha_left, alpha_right);
-  else if |df| <= -c_2*df0
-    return (x+alpha*s, f, df)
-  else if f < f_0
-    return bracket_search( f(), (x, s), alpha_right, alpha_left);
-  alpha_m = alpha_p
-  alpha_p = 2 alpha_p
+In order to optimize a function of `N` variables the non-linear
+conjugate gradient routine needs memory to hold two vectors of lenth
+`N` to hold the gradient and a search direction.
 
-Bracket Search
-alpha_j = 1/2( alpha_p+alpha_m)
-(f, df) = f(x+alpha_j)
+I implemented the memory managment by including the two pointers in an
+opaque pointer as below
 
+````c
+struct cg_workspace_struct{
+  double *dx /* gradient */
+  double *s /* search direction */
+  /* other stuff */
+};
+typedef struct cg_workspace_struct* cg_workspace;
+````
+
+and created two functions that allocate the memory and free the memory
+in the opaque pointer.  
+
+````c 
+cg_workspace cg_malloc( unsigned int n);
+void cg_free( cg_workspace g); 
+````
+
+The optimization function
+-------------------------
+
+I want the routine to be 

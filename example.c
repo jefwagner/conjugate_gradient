@@ -84,6 +84,7 @@ int main( int argc, char **argv){
   conjugate_gradient( g, x);
   
   fprintf( stdout, "Program finished after %d evaluations\n", count);
+  fprintf( stdout, "cg counted  %d evaluations\n", g->eval);
   fprintf( stdout, "Found final point at:\n");
   for( i=0; i<n; i++){
     fprintf( stdout, "%1.3g ", x[i] );

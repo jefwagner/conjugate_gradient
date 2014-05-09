@@ -15,6 +15,9 @@ struct cg_workspace{
   double (*h)( int n, const double *x, double *dx, void *p);
   int n;
   void *params;
+  
+  /* integer to hold the number of function evaluations */
+  int eval;
 
   /* variables used in the conjugate gradient method */
   double h0; /* value at current point */
