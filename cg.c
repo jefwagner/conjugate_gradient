@@ -2,22 +2,72 @@
  * Nonlinear Conjugate Gradient File
  */
 
-struct nlcg_workspace_struct{
-  double *dx;
-  double *s;
-};
-typedef struct nlcg_workspace_struct* nlcg_workspace;
-
 typedef double (*opt_func)( int n, const double *x, 
 			    double *dfdx, void *params);
 
-double nlcg_optimize( nlcg_workspace g, opt_func func,
-		      unsigned int n, double *x, void *params){
+struct nlcg_workspace_struct{
+  unsigned int n;
+  opt_func func;
+  void *params;
+
+  unsigned int array_size;
+  double *dx; /*!< */
+  double *s; /*!< */
+};
+typedef struct nlcg_workspace_struct* nlcg_workspace;
+
+typedef struct{
+  double smag;
+  double alpha_m;
+  double f_m;
+  double df_m;
+  double alpha_p;
+  double f_p;
+  double df_p;
+} ls_workspace;
+
+nlcg_workspace nlcg_malloc( unsigned int n){
+  nlcg_workspace g = (nlcg_workspace) 
+    malloc( sizeof(struct nlcg_workspace));
+  g->array_size = n;
+  g->dx = (double*) malloc( n*sizeof(double));
+  g->s = (double*) malloc( n*sizeof(double));
+}
+
+int nlcg_set( nlcg_workspace g, unsigned int n, 
+	      opt_func func, const void *params){
+  if( n > g->array_size ){
+    return NLCG_ARRAY_ERROR;
+  }
+  g->n = n;
+  g->func = func;
+  g->params = params;
+  return NLCG_SUCCESS;
+}
+
+void nlcg_free( nlcg_workspace g){
+  free( g->dx);
+  free( g->s);
+  free( g);
+}
+
+void ls_set( ls_workspace *ls,
+	     double alpha_m, double f_m, double df_m,
+	     double alpha_p, double f_p, double df_p){
+  ls->alpha_m = alpha_m;
+  ls->f_m = f_m;
+  ls->df_m = df_m;
+  ls->alpha_p = alpha_p;
+  ls->f_p = f_p;
+  ls->df_p = df_p;
+}
+
+double nlcg_optimize( nlcg_workspace g, double *x){
   unsigned int i;
   double f, denom, beta, slope;
-  double alpha = ALPHA_0;
   double *dx = g->dx;
   double *s = g->s;
+  ls_workspace ls;
 
   f = func( n, x, dx, params);
   denom = 0.;
@@ -26,6 +76,7 @@ double nlcg_optimize( nlcg_workspace g, opt_func func,
     s[i] = -dx[i];
   }
 
+  ls_set( &ls, 0., f, -sqrt( denom), 0., 0., 0.); 
   f = sw_line_search( g, f, &alpha, func, n, x, params);
   slope = 0.;
   for( i=0; i<n; i++){
