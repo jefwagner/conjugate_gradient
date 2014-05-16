@@ -1,42 +1,19 @@
-/*!
- * Conjugate Gradient data structure
- * contains:
- * + common elements:
- *   - function pointer
- *   - size of function
- *   - functin parameter
- * + memory for arrays
- *   - derivative for current point
- *   - search direction
- *   - derivative for previous point
- *   - derivative for next point
- */
-struct cg_workspace{
-  double (*h)( int n, const double *x, double *dx, void *p);
-  int n;
-  void *params;
-  
-  /* integer to hold the number of function evaluations */
-  int eval;
+/* irene loves mommy  */
+/* I love mommy and daddy! */
 
-  /* variables used in the conjugate gradient method */
-  double h0; /* value at current point */
-  double *dx0; /* current gradient */
-  double *s; /* search direction */
+#ifndef JW_NLCG
+#define JW_NLCG
 
-  /* variables used in the line search */
-  double smag;
-  double dh0;  /* derivative in search direction at current point */
-  double alpham; /* step length at step i-1 */
-  double hm; /* value at step i-1 */
-  double dhm; /* derivative in search direction at step i-1 */
-  double alphap; /* step length at step i+1 */
-  double hp; /* value at step i */
-  double *dxp; /* gradient at step i */
-  double dhp; /* derivative in search direction at step i */
-};
+#define NLCG_SUCCESS 1
+#define NLCG_MEM_ERROR -1
 
-struct cg_workspace* allocate_cg_workspace( int n);
-void free_cg_workspace( struct cg_workspace *g);
-void conjugate_gradient( struct cg_workspace *g, double *x);
+typedef double (*objective_fn)( int n, const double *x, 
+				double *dfdx, void *p);
+typedef struct nlcg_ws_struct* nlcg_ws;
 
+nlcg_ws nlcg_malloc( unsigned int max_size);
+int nlcg_set( objective_fn f, unsigned int n, void *p, nlcg_ws g);
+double nlcg_optimize( double *x, nlcg_ws g);
+void nlcg_free( nlcg_ws g);
+
+#endif
