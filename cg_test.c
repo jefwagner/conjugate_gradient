@@ -124,44 +124,117 @@ void opt_fn_eval_test(){
   free( x);
 }
 
+/*!
+ * lin_fn_eval test.
+ *
+ * Here we test to see if the linear function evaluation function
+ * works as advertized. By definition, the linear function is
+
+ * \f[ \phi(\alpha) = f(x_0+\alpha \hat{s}_x, y_0+\alpha \hat{s}_y), \]
+
+ * where (x_0,y_0) is the starting point, and \f$\hat{{\bf s}}\f$ is a
+ * normalized search direction. We use a simple two dimentional
+ * quadratic function
+
+ * \f[ f(x,y) = A x^2 + B y^2, \f]
+
+ * Where A and B are choosen to be different numbers. We choose a
+ * search direction in the (1,1) direction. where we know that the
+ * linear function should give
+
+ * \f[ \phi(\alpha) = \frac{A+B}{2}\alpha^2 + 
+ *    \sqrt{2)(A x_0 + B y_0)\alpha + \big( A x_0^2 + B y_0^2\big). \f]
+
+ * We will test several values of A and B, several magnitudes of the
+ * search direction, and several starting points.
+ */
 void lin_fn_eval_test(){
-  double a[2], c[2], fmin;
+  int i, j, status;
+  double a[2], c[2];
   quad_params qp;
   opt_fn of;
-  double x[2], dfdx[2], s[2];
+  double x[2], dfdx[2], s[2], smag;
   lin_fn lf;
+  double A, B, C;
+  double alpha, f, tf, dfda, tdfda;
   
-  a[0] = ;
-  a[1] = ;
-  c[0] = ;
-  c[1] = ;
-  qp.a = a;
-  qp.c = c;
-  qp.fmin = ;
+  fprintf( stdout, " lin_func_eval: ");
+
+  status = 0;
+  for( i=0; i<10; i++){
+
+    a[0] = 5.*rand()/RAND_MAX;
+    a[1] = 5.*rand()/RAND_MAX;
+    c[0] = 0.;
+    c[1] = 0.;
+    qp.a = a;
+    qp.c = c;
+    qp.fmin = 0.;
   
-  of.n = 2;
-  of.f = (objective_func) &quad;
-  of.p = (void*) &qp;
+    of.n = 2;
+    of.f = (objective_fn) &quad;
+    of.p = (void*) &qp;
 
-  x[0] = ;
-  x[1] = ;
-  dfdx[0] = ;
-  dfdx[1] = ;
+    x[0] = 10.*rand()/RAND_MAX-5.;
+    x[1] = 10.*rand()/RAND_MAX-5.;
+    smag = exp( 6.*rand()/RAND_MAX-3.);
+    s[0] = sqrt(0.5)*smag;
+    s[1] = sqrt(0.5)*smag;
 
-  lf.of = of;
-  lf.x = x;
-  lf.dfdx = dfdx;
-  lf.s = s;
+    lf.of = of;
+    lf.x = x;
+    lf.dfdx = dfdx;
+    lf.s = s;
+    lf.smag = smag;
+    lf.a_prev = 0.;
 
+    A = 0.5*(a[0]+a[1]);
+    B = sqrt(2.)*(a[0]*x[0]+a[1]*x[1]);
+    C = a[0]*x[0]*x[0]+a[1]*x[1]*x[1];
+    
+    for( j=0; j<10; j++){
+      alpha = 5.*rand()/RAND_MAX;
+      tf = A*alpha*alpha+B*alpha+C;
+      tdfda = 2.*A*alpha+B;
+      f = lin_fn_eval( alpha, &dfda, &lf);
+      if( fabs( f-tf ) > 1.e-6 ){
+	status += 1;
+      }
+      if( fabs( dfda-tdfda) > 1.e-6 ){
+	status += 1;
+      }
+    }
+  }
+  if( status == 0 ){
+    fprintf( stdout, "pass\n" );
+  }else{
+    fprintf( stdout, "fail\n" );
+  }
 }
 
-/*
-  for( i=0; i<n; i++){
-    qp.a[i] = 0.5 + (1.*rand())/RAND_MAX;
-    qp.c[i] = (2.*rand())/RAND_MAX -1.;
-  }
-  qp.fmin = (2.*rand())/RAND_MAX -1.;
-*/
+double quad_1d( unsigned int n, const double *x, 
+		double *dfdx, void *p){
+  dfdx[0] = 2.*x[0];
+  return x[0]*x[0];
+}
+double gaussian_1d( unsigned int n, const double *x, 
+		    double *dfdx, void *p){
+  double f = exp( -0.5*x[0]*x[0]);
+  dfdx[0] = x[0]*f;
+  return -f;
+}
+double quartic_1d( unsigned int n, const double *x,
+		   double *dfdx, void *p){
+  double x2 = x[0]*x[0];
+  dfdx[0] = 3.*x[0]*x2-2.*x[0];
+  return x2*x2-x2;
+}
+
+void sw_bracket_search_test(){
+  
+}
+
+
 
 int main(){
   opt_fn_eval_test();
