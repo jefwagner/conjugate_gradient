@@ -212,17 +212,26 @@ void lin_fn_eval_test(){
   }
 }
 
+/*!
+ * 1-D quadratic test function.
+ */
 double quad_1d( unsigned int n, const double *x, 
 		double *dfdx, void *p){
   dfdx[0] = 2.*x[0];
   return x[0]*x[0];
 }
+/*!
+ * 1-D gaussian test function
+ */
 double gaussian_1d( unsigned int n, const double *x, 
 		    double *dfdx, void *p){
   double f = exp( -0.5*x[0]*x[0]);
   dfdx[0] = x[0]*f;
   return -f;
 }
+/*!
+ * 1-D quartic double well test function
+ */
 double quartic_1d( unsigned int n, const double *x,
 		   double *dfdx, void *p){
   double x2 = x[0]*x[0];
@@ -230,10 +239,36 @@ double quartic_1d( unsigned int n, const double *x,
   return x2*x2-x2;
 }
 
+/*!
+ * sw_bracket_search test
+ *
+ * This function uses the three simple 1-D test functions to test the
+ * bracket search algorithm. The first two test using the quadratic
+ * and Gaussian test functions are done by randomly choosing a
+ * starting point and the two bracketing points. After the bracket
+ * search is completed we confirm that the result obeys the strong
+ * wolf condition. The final test using the quartic function is done
+ * by using a given set of starting conditions (instead of
+ * randomly). Again, we then simply confirm that the result obeys the
+ * strong wolf condition.
+ */
 void sw_bracket_search_test(){
+  of.n = 1;
+  of.f = (objective_fn) &quad_1d;
+  
+  x0 = 5.*rand()/RAND_MAX+1.;
+  x = x0;
+  smag = -1.;
+  s = -2*x0;
+
+  lf.of = of;
+  lf.x = &x;
+  lf.dfdx = &dfdx;
+  lf.s = &s;
+  lf.smag = smag;
+  lf.a_prev = 0.;
   
 }
-
 
 
 int main(){
