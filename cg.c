@@ -89,9 +89,12 @@ static double sw_bracket_search( double f_0, double df_0,
  */
 nlcg_ws nlcg_malloc( unsigned int max_size){
   nlcg_ws g = (nlcg_ws) malloc( sizeof(struct nlcg_ws_struct));
+  if( g == NULL){ return NULL;}
   g->max_size = max_size;
   g->lf.dfdx = (double*) malloc( max_size*sizeof(double));
+  if( g->lf.dfdx == NULL ){ return NULL;}
   g->lf.s = (double*) malloc( max_size*sizeof(double));
+  if( g->lf.dfdx == NULL ){ return NULL;}
   return g;
 } 
 
@@ -219,6 +222,8 @@ static double sw_line_search( double f, lin_fn *lf){
  
   /* set the initial function value */
   f_0 = f;
+  /* set the initial value of a */
+  lf->a_prev = 0.;
   /* cacluate the derivative and the magitude of the `s` vector */
   lf->smag = s[0]*s[0];
   df_0 = dfdx[0]*s[0];

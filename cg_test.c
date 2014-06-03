@@ -235,44 +235,401 @@ double gaussian_1d( unsigned int n, const double *x,
 double quartic_1d( unsigned int n, const double *x,
 		   double *dfdx, void *p){
   double x2 = x[0]*x[0];
-  dfdx[0] = 3.*x[0]*x2-2.*x[0];
+  dfdx[0] = 4.*x[0]*x2-2.*x[0];
   return x2*x2-x2;
+}
+
+/*!
+ * rand_double utility function
+ */
+double rand_double( double low, double hi){
+  return (hi-low)*rand()/RAND_MAX + low;
 }
 
 /*!
  * sw_bracket_search test
  *
  * This function uses the three simple 1-D test functions to test the
- * bracket search algorithm. The first two test using the quadratic
- * and Gaussian test functions are done by randomly choosing a
- * starting point and the two bracketing points. After the bracket
- * search is completed we confirm that the result obeys the strong
- * wolf condition. The final test using the quartic function is done
- * by using a given set of starting conditions (instead of
- * randomly). Again, we then simply confirm that the result obeys the
- * strong wolf condition.
+ * bracket search algorithm. The starting points for the bracketed
+ * search chosen randomly. For the quadratic we also randomly choose
+ * between the order of the arguments. The test succeeds if the final
+ * points obey the strong wolfe conditions.
  */
 void sw_bracket_search_test(){
+  int status, i;
+  double c1=C1, c2=C2;
+  double x, f, dfdx;
+  double x0, ap, am;
+  double f0, df0, fm, dfm, fp, dfp;
+  opt_fn of;
+  lin_fn lf;
+  double s, smag;
+
+  fprintf( stdout, " sw_bracket_search: ");
+  status = 0;
+
+  /* Test the quadratic function*/
   of.n = 1;
   of.f = (objective_fn) &quad_1d;
-  
-  x0 = 5.*rand()/RAND_MAX+1.;
-  x = x0;
-  smag = -1.;
-  s = -2*x0;
-
   lf.of = of;
-  lf.x = &x;
-  lf.dfdx = &dfdx;
-  lf.s = &s;
-  lf.smag = smag;
-  lf.a_prev = 0.;
   
+  for( i=0; i<10; i++){
+    /* Choose the initial point randomly */
+    x0 = rand_double( 1., 6.);
+
+    /* Evaluate the function at x0 */
+    f0 = opt_fn_eval( &x0, &df0, &of);
+
+    /* Set the info for the linear helper struct */
+    x = x0;
+    s = -df0;
+    smag = fabs( df0);
+    lf.x = &x;
+    lf.dfdx = &dfdx;
+    lf.s = &s;
+    lf.smag = smag;
+    lf.a_prev = 0.;
+    
+    /* Set initial data to check wolf conditions*/
+    f0 = lin_fn_eval( 0, &df0, &lf);
+    /* Always use one bracket point as our initial point */
+    am = 0;
+    fm = f0;
+    dfm = df0;
+    /* with 50% chance */
+    if( rand() % 2 == 0 ){
+      /* Choose a new point that is "larger" */
+      ap = rand_double( 2*(1-c1)*x0, 4*(1-c1)*x0);
+      fp = lin_fn_eval( ap, &dfp, &lf);
+      
+      f = sw_bracket_search( f0, df0, am, fm, dfm, ap, fp, dfp, &lf);
+    }else{
+      /* Choose a new point that is "smaller" */
+      ap = rand_double( (1+c2)*x0, 2*(1-c1)*x0);
+      fp = lin_fn_eval( ap, &dfp, &lf);
+      
+      f = sw_bracket_search( f0, df0, ap, fp, dfp, am, fm, dfm, &lf);
+    }
+    /* Check if the result satisfies the wolfe conditions */
+    if( f > f0 + c1*(x0-x)*df0 || fabs( dfdx) > -c2*df0 ){
+      status += 1;
+    } 
+  }
+
+  /* Test the gaussian function*/
+  of.n = 1;
+  of.f = (objective_fn) &gaussian_1d;
+  lf.of = of;
+  
+  for( i=0; i<10; i++){
+    /* Choose the initial point randomly */
+    x0 = rand_double( 1., 3.);
+
+    /* Evaluate the function at x0 */
+    f0 = opt_fn_eval( &x0, &df0, &of);
+
+    /* Set the info for the linear helper struct */
+    x = x0;
+    s = -df0;
+    smag = fabs( df0);
+    lf.x = &x;
+    lf.dfdx = &dfdx;
+    lf.s = &s;
+    lf.smag = smag;
+    lf.a_prev = 0.;
+    
+    /* Set initial data to check wolf conditions*/
+    f0 = lin_fn_eval( 0, &df0, &lf);
+    /* Always use one bracket point as our initial point */
+    am = 0;
+    fm = f0;
+    dfm = df0;
+    /* Choose a new point that is "larger" */
+    ap = rand_double( 2*(1-c1)*x0 , 4*(1-c1)*x0);
+    fp = lin_fn_eval( ap, &dfp, &lf);
+      
+    f = sw_bracket_search( f0, df0, am, fm, dfm, ap, fp, dfp, &lf);
+    /* Check if the result satisfies the wolfe conditions */
+    if( f > f0 + c1*(x0-x)*df0 || fabs( dfdx) > -c2*df0 ){
+      status += 1;
+    } 
+  }
+
+  /* Test the quartic function*/
+  of.n = 1;
+  of.f = (objective_fn) &quartic_1d;
+  lf.of = of;
+  
+  for( i=0; i<10; i++){
+    /* Choose the initial point randomly */
+    x0 = rand_double( 1., 3.);
+
+    /* Evaluate the function at x0 */
+    f0 = opt_fn_eval( &x0, &df0, &of);
+
+    /* Set the info for the linear helper struct */
+    x = x0;
+    s = -df0;
+    smag = fabs( df0);
+    lf.x = &x;
+    lf.dfdx = &dfdx;
+    lf.s = &s;
+    lf.smag = smag;
+    lf.a_prev = 0.;
+    
+    /* Set initial data to check wolf conditions*/
+    f0 = lin_fn_eval( 0, &df0, &lf);
+    /* Always use one bracket point as our initial point */
+    am = 0;
+    fm = f0;
+    dfm = df0;
+    /* Choose a new point that is "larger" */
+    ap = rand_double( 2*(1-c1)*x0 , 4*(1-c1)*x0);
+    fp = lin_fn_eval( ap, &dfp, &lf);
+      
+    f = sw_bracket_search( f0, df0, am, fm, dfm, ap, fp, dfp, &lf);
+    /* Check if the result satisfies the wolfe conditions */
+    if( f > f0 + c1*(x0-x)*df0 || fabs( dfdx) > -c2*df0 ){
+      status += 1;
+    } 
+  }
+  
+  /* pass if status = 0, otherwise fail */
+  if( status == 0 ){
+    fprintf( stdout, "pass\n" );
+  }else{
+    fprintf( stdout, "fail\n" );
+  }
 }
 
+/*!
+ * sw_line_search test.
+ *
+ * This function test the strong wolfe line search proceedure using
+ * the same 1-d test functions as the bracketed search function. The
+ * starting points are randomly choosen. The test pass if the final
+ * points obey the strong wolfe conditions.
+ */
+void sw_line_search_test(){
+  int status, i;
+  double c1=C1, c2=C2;
+  double x, f, dfdx;
+  double x0, f0, df0;
+  opt_fn of;
+  lin_fn lf;
+  double s, smag;
+
+  fprintf( stdout, " sw_line_search: ");
+  status = 0;
+
+  /* Test the quadratic function*/
+  of.n = 1;
+  of.f = (objective_fn) &quad_1d;
+  lf.of = of;
+  
+  for( i=0; i<10; i++){
+    /* Choose the initial point randomly */
+    x0 = rand_double( 1., 6.);
+
+    /* Evaluate the function at x0 */
+    f0 = opt_fn_eval( &x0, &df0, &of);
+    /* Change the sign of derivative, because the search direction is
+       negative */
+    df0 = -df0;
+
+    /* Set the info for the linear helper struct */
+    x = x0;
+    s = df0;
+    smag = fabs( df0);
+    lf.x = &x;
+    lf.dfdx = &dfdx;
+    lf.s = &s;
+    lf.smag = smag;
+    lf.a_prev = 0.;
+    
+    f = sw_line_search( f0, &lf);
+    if( f > f0 + c1*(x0-x)*df0 || fabs( dfdx) > -c2*df0 ){
+      status += 1;
+    } 
+  }
+
+  /* Test the gaussian function*/
+  of.n = 1;
+  of.f = (objective_fn) &gaussian_1d;
+  lf.of = of;
+  
+  for( i=0; i<10; i++){
+    /* Choose the initial point randomly */
+    x0 = rand_double( 1., 3.);
+
+    /* Evaluate the function at x0 */
+    f0 = opt_fn_eval( &x0, &df0, &of);
+    /* Change the sign of derivative, because the search direction is
+       negative */
+    df0 = -df0;
+
+    /* Set the info for the linear helper struct */
+    x = x0;
+    s = df0;
+    smag = fabs( df0);
+    lf.x = &x;
+    lf.dfdx = &dfdx;
+    lf.s = &s;
+    lf.smag = smag;
+    lf.a_prev = 0.;
+    
+    f = sw_line_search( f0, &lf);
+    /* Check if the result satisfies the wolfe conditions */
+    if( f > f0 + c1*(x0-x)*df0 || fabs( dfdx) > -c2*df0 ){
+      status += 1;
+    } 
+  }
+
+  /* Test the quartic function*/
+  of.n = 1;
+  of.f = (objective_fn) &quartic_1d;
+  lf.of = of;
+  
+  for( i=0; i<10; i++){
+    /* Choose the initial point randomly */
+    x0 = rand_double( 1., 3.);
+
+    /* Evaluate the function at x0 */
+    f0 = opt_fn_eval( &x0, &df0, &of);
+    /* Change the sign of derivative, because the search direction is
+       negative */
+    df0 = -df0;
+
+    /* Set the info for the linear helper struct */
+    x = x0;
+    s = df0;
+    smag = fabs( df0);
+    lf.x = &x;
+    lf.dfdx = &dfdx;
+    lf.s = &s;
+    lf.smag = smag;
+    lf.a_prev = 0.;
+    
+    f = sw_line_search( f0, &lf);
+    /* Check if the result satisfies the wolfe conditions */
+    if( f > f0 + c1*(x0-x)*df0 || fabs( dfdx) > -c2*df0 ){
+      status += 1;
+    } 
+  }
+  
+  /* pass if status = 0, otherwise fail */
+  if( status == 0 ){
+    fprintf( stdout, "pass\n" );
+  }else{
+    fprintf( stdout, "fail\n" );
+  }
+}
+
+/*!
+ * nlcg_optimize test.
+ *
+ * This test three functions: nlcg_malloc, nlcg_set, and
+ * nlcg_optimize.  It allocates a workspace for a function of up to
+ * 100 variables, and confirms that it has a valid pointer. It then
+ * sets the size of the system from 10 up to 110 variables in steps of
+ * 10. For 10 through 100 we confirm that no error is returned, for
+ * 110 we confirm that an error is returned. We randomly populate a
+ * multidimensional quadratic function, and optimize. We confirm that
+ * the value, position, and derivatives are all within tolerance.
+ */
+void nlcg_optimize_test(){
+  int i, j, status, err;
+  quad_params qp;
+  double x[110], a[110], c[110];
+  nlcg_ws g; 
+  double f, dx, dfdx;
+  double f_tol = 1.e-4;
+  double dx_tol = 1.e-4;
+  double dfdx_tol = 1.e-8;
+  
+  status = 0;
+
+  qp.a = a;
+  qp.c = c;
+
+  /* allocate up to a 100 length arrays */
+  g = nlcg_malloc( 100);
+  /* check if it allocated correctly */
+  fprintf( stdout, " nlcg_malloc: ");
+  if( g == NULL ){ 
+    fprintf( stdout, "fail\n" );
+    return;
+  }
+  fprintf( stdout, "pass\n" );
+
+  /* for different lengths */
+  for( i=10; i<=110; i+=10){
+    /* set the length */
+    err = nlcg_set( (objective_fn) &quad, i, &qp, g);
+    /* make sure it worked for i <= 100 */
+    if( err != NLCG_SUCCESS ){
+      if( i==110){
+	fprintf( stdout, " nlcg_set: pass\n" );
+      }
+      break;
+    }
+    /* make sure that didn't work for i=110 */
+    if( i==110 ){
+      fprintf( stdout, " nlcg_set: FAIL\n" );
+      break;
+    }
+    /* randomly fill up the quadratic parameters */
+    for( j=0; j<i; j++){
+      a[j] = rand_double( 0.1, 2.1);
+      c[j] = rand_double( -3., 3.);
+      x[j] = rand_double( -3., 3.);
+    }
+    qp.fmin = rand_double( 0., 1.);
+    /* optimize the quadratic function */
+    f = nlcg_optimize( x, g);
+    /* Check if the solution value is near the minimum value */
+    if( fabs(f-qp.fmin) > f_tol ){
+      status += 1;
+    }
+    /* Check if the solution is near the minimum */
+    dx = 0.;
+    for( j=0; j<i; j++){
+      dx += (x[j]-c[j])*(x[j]-c[j]);
+    }
+    dx = sqrt( dx);
+    if( dx > dx_tol ){
+      status += 1;
+    }
+    /* Check if the derivative is near zero */
+    dfdx = 0.;
+    for( j=0; j<i; j++){
+      dfdx = (g->lf.dfdx[j])*(g->lf.dfdx[j]);
+    }
+    dfdx = sqrt( dfdx);
+    if( dfdx > dfdx_tol ){
+      status += 1;
+    }
+  }
+
+  fprintf( stdout, " nlcg_optimze: ");
+  /* pass if status = 0, otherwise fail */
+  if( status == 0 ){
+    fprintf( stdout, "pass\n" );
+  }else{
+    fprintf( stdout, "fail\n" );
+  }
+
+  nlcg_free( g); 
+}
 
 int main(){
   opt_fn_eval_test();
   lin_fn_eval_test();
+  sw_bracket_search_test();
+  sw_line_search_test();
+  nlcg_optimize_test();
+
   return 0;
 }
+
+
