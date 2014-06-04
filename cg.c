@@ -17,15 +17,19 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <float.h>
+#include <limits.h>
 #include <stdio.h>
 #include <math.h>
 #include "cg.h"
 
-#define NLCG_ITER_MAX 100000
+#define NLCG_ITER_MAX 50000
 #define LS_ITER_MAX 20
 #define BRACKET_ITER_MAX 40
 #define ALPHA_0 1.
-#define DFDX_TOL 1.e-8
+#define DX_TOL 1.e-3
+#define DFDX_TOL 1.e-4
+#define MAX_EVAL 100000
 #define C1 1.e-4
 #define C2 0.1
 
@@ -40,6 +44,7 @@ typedef struct opt_fn_struct{
   objective_fn f; /*!< objective function */
   unsigned int n; /*!< size \f${\bf x}\f$ vector */
   void *p; /*!< additional parameters */
+  int count;
 } opt_fn;
 
 /*
@@ -63,6 +68,29 @@ typedef struct lin_fn_struct{
 } lin_fn;
 
 /*!
+ * Tolerance structure.
+ *
+ * This structure holds the tolerances that determine when the routine stops.
+ *
+ * `df_tol` defines a minimum difference between function values in
+ * successive conjugate gradient steps.
+ *
+ * `dx_tol` defines a minimum step size that is accepted after
+ * successive conjugate gradient steps.
+ *
+ * `dfdx_tol` defines a minimum gradient at the final evaluated point.
+ *
+ * `max_eval` defines an approximate maximum number of function
+ * evaluations.
+ */
+struct nlcg_tol{
+  double df_tol;
+  double dx_tol;
+  double dfdx_tol;
+  int max_eval;
+};
+
+/*!
  * Non-linear conjugate gradient workspace.
  *
  * This function holds the neccessary variables and dynamically
@@ -74,12 +102,14 @@ struct nlcg_ws_struct{
   lin_fn lf; /*<! line search helper struct */
   double *dfdx_old; /*<! old gradient vector */
   unsigned int max_size; /*<! maximum size */
+  struct nlcg_tol tol;
 };
 
-
-static double opt_fn_eval( const double *x, double *dfdx, const opt_fn *of);
+static double opt_fn_eval( const double *x, double *dfdx, opt_fn *of);
 static double lin_fn_eval( double a, double *dfda, lin_fn *lf);
 static double sw_line_search( double f, lin_fn *lf);
+static double interpolate_qls( double a0, double f0, double df0,
+			       double a1, double f1, double df1 );
 static double sw_bracket_search( double f_0, double df_0,
 				 double a_lo, double f_lo, double df_lo,
 				 double a_hi, double f_hi, double df_hi, 
@@ -102,8 +132,37 @@ nlcg_ws nlcg_malloc( unsigned int max_size){
   g->lf.s = (double*) malloc( max_size*sizeof(double));
   if( g->lf.dfdx == NULL ){ return NULL;}
 
+  g->tol.df_tol = DBL_MAX;
+  g->tol.dx_tol = DX_TOL;
+  g->tol.dfdx_tol = DFDX_TOL;
+  g->tol.max_eval = MAX_EVAL;;
+
   return g;
 } 
+
+void nlcg_set_tol( double df_tol, double dx_tol, double dfdx_tol, 
+		   int max_eval, nlcg_ws g){
+  if( df_tol == 0. ){
+    g->tol.df_tol = DBL_MAX;
+  }else{
+    g->tol.df_tol = df_tol;
+  }
+  if( dx_tol == 0. ){
+    g->tol.dx_tol = DBL_MAX;
+  }else{
+    g->tol.dx_tol = dx_tol;
+  }
+  if( dfdx_tol == 0. ){
+    g->tol.dfdx_tol = DBL_MAX;
+  }else{
+    g->tol.dfdx_tol = dfdx_tol;
+  }
+  if( max_eval == 0 ){
+    g->tol.max_eval = INT_MAX;
+  }else{
+    g->tol.max_eval = max_eval;
+  }
+}
 
 /*!
  * Non-linear conjugate gradient initializer.
@@ -113,7 +172,7 @@ nlcg_ws nlcg_malloc( unsigned int max_size){
  * `g->max_size`, then it simply sets the parameters for the objective
  * function. It returns a success or failure code.
  */
-int nlcg_set( objective_fn f, unsigned int n, void *p, nlcg_ws g){
+int nlcg_set_sys( objective_fn f, unsigned int n, void *p, nlcg_ws g){
   if( n > g->max_size ){
     return NLCG_MEM_ERROR;
   }
@@ -150,7 +209,7 @@ void nlcg_free( nlcg_ws g){
  */
 double nlcg_optimize( double *x, nlcg_ws g){
   int i, j;
-  double f, denom, num, beta, slope;
+  double f, f_old, denom, num, beta, slope;
   int n = g->lf.of.n;
   opt_fn of = g->lf.of;
   lin_fn lf = g->lf;
@@ -158,6 +217,7 @@ double nlcg_optimize( double *x, nlcg_ws g){
   double *s = lf.s;
   double *dfdx_old = g->dfdx_old;
   lf.x = x;
+  lf.of.count = 0;
 
   /* Start off at the initial position */
   f = opt_fn_eval( x, dfdx, &of);
@@ -170,17 +230,22 @@ double nlcg_optimize( double *x, nlcg_ws g){
   for( j=0; j<NLCG_ITER_MAX; j++ ){
     /* Do a line search*/
     memcpy( dfdx_old, dfdx, n*sizeof(double));
+    f_old = f;
     f = sw_line_search( f, &lf);
     /* Calculate the square magnitude of the gradient */
-    printf( "value: %1.3e \n", f);
+/*     printf( "value: %1.3e \n", f); */
     slope = dfdx[0]*dfdx[0];
     num = dfdx[0]*(dfdx[0]-dfdx_old[0]);
     for( i=1; i<n; i++){
       slope += dfdx[i]*dfdx[i];
       num += dfdx[i]*(dfdx[i]-dfdx_old[i]);
     }
-    /* Stop if falls below some tolerance */
-    if( slope < DFDX_TOL*DFDX_TOL ){
+    /* Stop if change in value, change in position, or slope falls
+       below some tolerance */
+    if( (f-f_old < g->tol.df_tol &&
+	 lf.a_prev < g->tol.dx_tol &&
+	 slope < (g->tol.dfdx_tol)*(g->tol.dfdx_tol)) ||
+	g->lf.of.count > g->tol.max_eval){
       break;
     }
     /* Calculate the beta factor */
@@ -270,7 +335,7 @@ static double sw_line_search( double f, lin_fn *lf){
     }
     /* check if satisfies the strong Wolfe condition */
     if( fabs(df_p) <= -c2*df_0 ){
-      return f;
+      return f_p;
     }
     /* check if bracketed & `f_m` > `f_p` */
     if( df_p >= 0. ){
@@ -320,6 +385,7 @@ static double sw_bracket_search( double f_0, double df_0,
   for( i=0; i<BRACKET_ITER_MAX; i++){
     /* interpolate between the two points */
     a_j = 0.5*(a_lo + a_hi);
+/*     a_j = interpolate_qls( a_lo, f_lo, df_lo, a_hi, f_hi, df_hi); */
     /* evaluate at the new point */
     f_j = lin_fn_eval( a_j, &df_j, lf);
     /* if appropriate, replace hi point*/
@@ -354,6 +420,36 @@ static double sw_bracket_search( double f_0, double df_0,
 }
 
 /*!
+ * Interpolate quadratic least square.
+ *
+ * This function returns a guess for the value of `a` between two
+ * points `a0` and `a1` that minimizes a linear function. It takes the
+ * positions `a0` and `a1`, the function values `f0` and `f1`, and the
+ * derivatives `df0` and `df1`. If there is not a guarenteed minimum
+ * between `a0` and `a1`, it uses a simple bisection. Otherwise, the
+ * iterpolation is based on a least square fit of the bracketing
+ * values and derivatives to the parameters of a quadratic function.
+ */
+static double interpolate_qls( double a0, double f0, double df0,
+			       double a1, double f1, double df1 ){
+  double Da, Df, Ddf, result, adjust;
+  /* Difference of points, values, and derivatives */
+  Da = a1-a0;
+  Df = f1-f0;
+  Ddf = df1-df0;
+  /* Start with the bisection */
+  result = 0.5*(a1+a0);
+  /* As long as we have a minimum */
+  if( df0*df1 < 0 && Ddf*Da >0 ){    
+    adjust = (2.*(df1+df0)+Df*Da)/(Ddf*(4.+Da*Da));
+    if( -0.49 < adjust && adjust < 0.49 ){
+      result -= Da*adjust;
+    }
+  }
+  return result;
+}
+
+/*!
  * Optimization function evaluation.
  *
  * This function evaluates the objective function at the vector `x`,
@@ -361,7 +457,8 @@ static double sw_bracket_search( double f_0, double df_0,
  * optimization function helper struct `of` to hold all the extraneous
  * stuff.
  */
-static double opt_fn_eval( const double *x, double *dfdx, const opt_fn *of){
+static double opt_fn_eval( const double *x, double *dfdx, opt_fn *of){
+  of->count++;
   return of->f( of->n, x, dfdx, of->p);
 }
 

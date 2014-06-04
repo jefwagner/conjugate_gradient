@@ -78,7 +78,8 @@ int main( int argc, char **argv){
   g = nlcg_malloc( n);
 
   /* Populate the nlcg object */
-  nlcg_set( (objective_fn) &rosenbrock, n, (void *) &count, g);
+  nlcg_set_sys( (objective_fn) &rosenbrock, n, (void *) &count, g);
+  nlcg_set_tol( 0., 0., 1.e-3, 0, g);
 
   /* Randomize the initial guess */
   for( i=0; i<n; i++){

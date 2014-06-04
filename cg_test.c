@@ -11,6 +11,13 @@
 #include <cg.c>
 
 /*!
+ * rand_double utility function
+ */
+double rand_double( double low, double hi){
+  return (hi-low)*rand()/RAND_MAX + low;
+}
+
+/*!
  * Quadratic test function parameter struct.
  */
 typedef struct{ double *a, *c, fmin;} quad_params;
@@ -164,8 +171,8 @@ void lin_fn_eval_test(){
   status = 0;
   for( i=0; i<10; i++){
 
-    a[0] = 5.*rand()/RAND_MAX;
-    a[1] = 5.*rand()/RAND_MAX;
+    a[0] = rand_double( 0., 5.);
+    a[1] = rand_double( 0., 5.);
     c[0] = 0.;
     c[1] = 0.;
     qp.a = a;
@@ -176,9 +183,9 @@ void lin_fn_eval_test(){
     of.f = (objective_fn) &quad;
     of.p = (void*) &qp;
 
-    x[0] = 10.*rand()/RAND_MAX-5.;
-    x[1] = 10.*rand()/RAND_MAX-5.;
-    smag = exp( 6.*rand()/RAND_MAX-3.);
+    x[0] = rand_double( -5., 5.);
+    x[1] = rand_double( -5., 5.);
+    smag = exp( rand_double( -3., 3.));
     s[0] = sqrt(0.5)*smag;
     s[1] = sqrt(0.5)*smag;
 
@@ -194,7 +201,7 @@ void lin_fn_eval_test(){
     C = a[0]*x[0]*x[0]+a[1]*x[1]*x[1];
     
     for( j=0; j<10; j++){
-      alpha = 5.*rand()/RAND_MAX;
+      alpha = rand_double( 0., 5.);
       tf = A*alpha*alpha+B*alpha+C;
       tdfda = 2.*A*alpha+B;
       f = lin_fn_eval( alpha, &dfda, &lf);
@@ -241,10 +248,41 @@ double quartic_1d( unsigned int n, const double *x,
 }
 
 /*!
- * rand_double utility function
+ * interpolate_qls test.
+ *
+ * This function test the interpolation function.
  */
-double rand_double( double low, double hi){
-  return (hi-low)*rand()/RAND_MAX + low;
+void interpolate_qls_test(){
+  int i, status;
+  double a0, f0, df0, a1, f1, df1, a;
+  double quad_tol = 1.e-6;
+
+  fprintf( stdout, " interpolate_qls: ");
+  status = 0;
+
+  /* First test the quadratic: it should be exact */
+  for( i=0; i<10; i++){
+    if( rand() %2 == 0 ){
+      a0 = rand_double( 1., 5.);
+      a1 = rand_double( -5., -1.);
+    }else{
+      a0 = rand_double( -5., -1.);
+      a1 = rand_double( 1., 5.);
+    }
+    f0 = quad_1d( 1, &a0, &df0, NULL);
+    f1 = quad_1d( 1, &a1, &df1, NULL);
+    a = interpolate_qls( a0, f0, df0, a1, f1, df1);
+    if( fabs( a) > quad_tol ){
+      status += 1;
+    }
+  }
+  /* Test the guassian:*/
+
+  if( status == 0 ){
+    fprintf( stdout, "pass\n" );
+  }else{
+    fprintf( stdout, "fail\n" );
+  }
 }
 
 /*!
@@ -544,9 +582,9 @@ void nlcg_optimize_test(){
   double x[110], a[110], c[110];
   nlcg_ws g; 
   double f, dx, dfdx;
-  double f_tol = 1.e-4;
-  double dx_tol = 1.e-4;
-  double dfdx_tol = 1.e-8;
+  double f_tol = 1.e-2;
+  double dx_tol = 1.e-3;
+  double dfdx_tol = 1.e-4;
   
   status = 0;
 
@@ -566,7 +604,7 @@ void nlcg_optimize_test(){
   /* for different lengths */
   for( i=10; i<=110; i+=10){
     /* set the length */
-    err = nlcg_set( (objective_fn) &quad, i, &qp, g);
+    err = nlcg_set_sys( (objective_fn) &quad, i, &qp, g);
     /* make sure it worked for i <= 100 */
     if( err != NLCG_SUCCESS ){
       if( i==110){
@@ -626,6 +664,7 @@ void nlcg_optimize_test(){
 int main(){
   opt_fn_eval_test();
   lin_fn_eval_test();
+  interpolate_qls_test();
   sw_bracket_search_test();
   sw_line_search_test();
   nlcg_optimize_test();
