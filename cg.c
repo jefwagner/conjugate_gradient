@@ -16,10 +16,12 @@
  */
 
 #include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
 #include <math.h>
 #include "cg.h"
 
-#define NLCG_ITER_MAX 50
+#define NLCG_ITER_MAX 100000
 #define LS_ITER_MAX 20
 #define BRACKET_ITER_MAX 40
 #define ALPHA_0 1.
@@ -70,6 +72,7 @@ typedef struct lin_fn_struct{
  */
 struct nlcg_ws_struct{
   lin_fn lf; /*<! line search helper struct */
+  double *dfdx_old; /*<! old gradient vector */
   unsigned int max_size; /*<! maximum size */
 };
 
@@ -90,11 +93,15 @@ static double sw_bracket_search( double f_0, double df_0,
 nlcg_ws nlcg_malloc( unsigned int max_size){
   nlcg_ws g = (nlcg_ws) malloc( sizeof(struct nlcg_ws_struct));
   if( g == NULL){ return NULL;}
+
   g->max_size = max_size;
+  g->dfdx_old = (double*) malloc( max_size*sizeof(double));
+  if( g->dfdx_old == NULL ){ return NULL;}
   g->lf.dfdx = (double*) malloc( max_size*sizeof(double));
   if( g->lf.dfdx == NULL ){ return NULL;}
   g->lf.s = (double*) malloc( max_size*sizeof(double));
   if( g->lf.dfdx == NULL ){ return NULL;}
+
   return g;
 } 
 
@@ -143,12 +150,13 @@ void nlcg_free( nlcg_ws g){
  */
 double nlcg_optimize( double *x, nlcg_ws g){
   int i, j;
-  double f, denom, beta, slope;
+  double f, denom, num, beta, slope;
   int n = g->lf.of.n;
   opt_fn of = g->lf.of;
   lin_fn lf = g->lf;
   double *dfdx = lf.dfdx;
   double *s = lf.s;
+  double *dfdx_old = g->dfdx_old;
   lf.x = x;
 
   /* Start off at the initial position */
@@ -161,23 +169,34 @@ double nlcg_optimize( double *x, nlcg_ws g){
   }
   for( j=0; j<NLCG_ITER_MAX; j++ ){
     /* Do a line search*/
+    memcpy( dfdx_old, dfdx, n*sizeof(double));
     f = sw_line_search( f, &lf);
     /* Calculate the square magnitude of the gradient */
+    printf( "value: %1.3e \n", f);
     slope = dfdx[0]*dfdx[0];
+    num = dfdx[0]*(dfdx[0]-dfdx_old[0]);
     for( i=1; i<n; i++){
       slope += dfdx[i]*dfdx[i];
+      num += dfdx[i]*(dfdx[i]-dfdx_old[i]);
     }
     /* Stop if falls below some tolerance */
     if( slope < DFDX_TOL*DFDX_TOL ){
       break;
     }
     /* Calculate the beta factor */
-    beta = slope / denom;
+    beta = num / denom;
     beta = beta > 0 ? beta : 0;
     denom = slope;
+    slope = 0.;
     /* Use beta factor to get new search direction */
     for( i=0; i<n; i++){
       s[i] = -dfdx[i] + beta*s[i];
+      slope = s[i]*dfdx[i];
+    }
+    if( slope > 0. ){
+      for( i=0; i<n; i++){
+	s[i] = -dfdx[i];
+      }
     }
     /* And repeat */
   }

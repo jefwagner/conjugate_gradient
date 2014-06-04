@@ -1,9 +1,9 @@
 ########################################################################
 # General Makefile
 ########################################################################
-PROGRAM = cg_test
-OBJS = cg_test.o
-DEPS = cg.c cg.h
+PROGRAM = example
+OBJS = example.o cg.o
+DEPS = cg.h
 
 ODIR = .
 SDIR = .

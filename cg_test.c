@@ -37,6 +37,7 @@ double quad( unsigned int n, const double *x,
     f += a[i]*(x[i]-c[i])*(x[i]-c[i]);
     dfdx[i] = 2.*a[i]*(x[i]-c[i]);
   }
+
   return f;
 }
 

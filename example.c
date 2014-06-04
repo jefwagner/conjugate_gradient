@@ -4,10 +4,13 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
-#include "cg.h" /*! include the header file */
+/* include the header file */
+#include "cg.h" 
 
 
 /*!
+ * Rosenbrock function. 
+ *
  * This is a standard test function called the rosenbrock function. It
  * has a narrow curved vally in n dimensional space. The minimum is
  * located in that vally at \f[x_i=1 \forall i\f]. This function is a
@@ -23,11 +26,6 @@ double rosenbrock( int n, const double *x, double *dx, void *p)
   /*! increment the integer held in p by 1 */
   int *count = (int *) p;
   (*count)++;
-
-/*   for( i=0; i<n; i++){ */
-/*     fprintf( stdout, "%1.3g ", x[i] ); */
-/*   } */
-/*   fprintf( stdout, "\n"); */
 
   sum += (1.-x[0])*(1.-x[0]) +
     100.*(x[1]-x[0]*x[0])*(x[1]-x[0]*x[0]);
@@ -46,12 +44,12 @@ double rosenbrock( int n, const double *x, double *dx, void *p)
 }
 
 /*!
- * The example program shows how to use the conjugate gradient
- * algroithm. It takes as argument a single integer that determines
- * the dimension of the system to be minimized is.
+ * Example nonlinear conjugate gradient optimization.
  *
- * The program has the following steps
- * 1. Reads the argument from the command line
+ * The example program shows how to use the conjugate gradient
+ * routine. The program has the following steps
+ 
+ * 1. Reads the dimension from the command line
  * 2. Allocates the memory needed
  * 3. Assigns the function and parameter to the minization object
  * 4. Initialized the first guess
@@ -61,37 +59,49 @@ double rosenbrock( int n, const double *x, double *dx, void *p)
  */
 int main( int argc, char **argv){
   int i, n, count;
-  struct cg_workspace *g;
-  double *x;
+  nlcg_ws g;
+  double f, *x;
 
+  /* completely useless error message*/
   if( argc != 2 ){
-    fprintf( stderr, "Incorrect arguments");
+    fprintf( stderr, "Incorrect arguments!\n");
     return 1;
   }
   n = atoi( argv[1]);
-
-  x = (double *) malloc( n*sizeof(double) );
-  g = allocate_cg_workspace( n);
-
-  g->h = &rosenbrock;
-  count = 0;
-  g->params = (void *) &count;
-
-  for( i=0; i<n; i++){
-    x[i] = 0.;
+  if( n < 2 ){
+    fprintf( stderr, "Dimension must be 2 or larger.\n");
+    return 1;
   }
 
-  conjugate_gradient( g, x);
+  /* Allocate the memory */
+  x = (double *) malloc( n*sizeof(double));
+  g = nlcg_malloc( n);
+
+  /* Populate the nlcg object */
+  nlcg_set( (objective_fn) &rosenbrock, n, (void *) &count, g);
+
+  /* Randomize the initial guess */
+  for( i=0; i<n; i++){
+    x[i] = 4.*rand()/RAND_MAX -2.;;
+  }
+
+  /* Optimize the function */
+  f = nlcg_optimize( x, g);
   
-  fprintf( stdout, "Program finished after %d evaluations\n", count);
-  fprintf( stdout, "cg counted  %d evaluations\n", g->eval);
-  fprintf( stdout, "Found final point at:\n");
+  /* Print the results */
+  fprintf( stdout, "Optimization finished after %d evaluations\n", count);
+  fprintf( stdout, "  Value at minimum : %1.6g\n", f);
+  fprintf( stdout, "  Optimum point :\n   ");
   for( i=0; i<n; i++){
     fprintf( stdout, "%1.3g ", x[i] );
+    if( (i+1)%6 == 0 ){
+      fprintf( stdout, "\n   " );
+    }
   }
   fprintf( stdout, "\n");
 
-  free_cg_workspace( g);
+  /* Free up memory */
+  nlcg_free( g);
   free( x);
 
   return 0;
