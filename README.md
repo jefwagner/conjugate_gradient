@@ -27,30 +27,35 @@ Object oriented style
 --------------------- 
 
 In order to optimize a function of `N` variables the non-linear
-conjugate gradient routine needs memory to hold two vectors of lenth
-`N` to hold the gradient and a search direction.
+conjugate gradient routine needs memory to hold at least two vectors
+of length `N` to hold the gradient and a search direction.
 
 I implemented the memory managment by including the two pointers in an
-opaque pointer as below
-
-````c
-struct cg_workspace_struct{
-  double *dx /* gradient */
-  double *s /* search direction */
-  /* other stuff */
-};
-typedef struct cg_workspace_struct* cg_workspace;
-````
-
-and created two functions that allocate the memory and free the memory
-in the opaque pointer.  
+opaque pointer and created two functions that allocate the memory and
+free the memory in the opaque pointer.
 
 ````c 
-cg_workspace cg_malloc( unsigned int n);
-void cg_free( cg_workspace g); 
+typedef nlcg_ws struct nlcg_ws_struct*;
+nlcg_ws nlcg_malloc( unsigned int n);
+void nlcg_free( nlcg_ws g); 
 ````
 
-The optimization function
--------------------------
+The non-linear conjugate gradient object of type `nlcg_ws` has two
+"methods" that initialize the problem and run the optimization
+routine.
 
-I want the routine to be 
+````c
+int nlcg_set( /* initial optimization parameters */, nlcg_ws g);
+double nlcg_optimize( double *x, nlcg_ws g);
+````
+
+To do
+-----
+
+1. Finish the readme that describes the example
+2. Create new method to set stopping conditions
+3. Try to speed up code:
+    1. Try new interpolation parameters
+	2. Try different beta parameters
+	
+
